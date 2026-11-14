@@ -7,49 +7,111 @@ import os
 from datetime import datetime, date, time, timedelta
 
 # ==========================================
-# 1. 頁面基本設定與自訂樣式
+# 1. 頁面基本設定與全套粉色系自訂樣式
 # ==========================================
 st.set_page_config(
     page_title="Anna & Fergal 減脂生死鬥",
-    page_icon="🔥",
+    page_icon="🎀",
     layout="wide"
 )
 
 st.markdown("""
 <style>
+    /* 整體背景與主文字顏色（櫻花粉漸層） */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #fff5f8 0%, #ffe6ef 100%);
+        color: #4a1525;
+    }
+    [data-testid="stHeader"] {
+        background: rgba(255, 245, 248, 0.8);
+    }
+    /* 側邊欄玫瑰粉背景 */
+    [data-testid="stSidebar"] {
+        background-color: #ffeaf2;
+        border-right: 1px solid #ffc2d6;
+    }
+    /* 標題與一般文字深莓果色，確保手機深色模式也清晰好讀 */
+    h1, h2, h3, h4, p, label, .stMarkdown {
+        color: #4a1525 !important;
+    }
+    /* 主要按鈕（桃粉色） */
+    button[kind="primary"] {
+        background-color: #ff5c8a !important;
+        border-color: #ff5c8a !important;
+        color: #ffffff !important;
+        border-radius: 10px !important;
+        font-weight: bold !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #e04372 !important;
+        border-color: #e04372 !important;
+    }
+    /* 次要按鈕（白底粉框） */
+    button[kind="secondary"] {
+        background-color: #ffffff !important;
+        border: 1.5px solid #ff8fab !important;
+        color: #c9184a !important;
+        border-radius: 10px !important;
+    }
+    button[kind="secondary"]:hover {
+        background-color: #fff0f5 !important;
+        border-color: #ff477e !important;
+    }
+    /* 進度條粉色漸層 */
+    [data-testid="stProgress"] > div > div > div > div {
+        background-image: linear-gradient(90deg, #ff8fab, #ff477e) !important;
+    }
+    /* 分頁標籤（Tabs）粉色高亮 */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #d6336c !important;
+        border-bottom-color: #ff477e !important;
+    }
+    /* 雙人切換卡片 */
     .profile-card {
         padding: 18px;
-        border-radius: 14px;
-        border: 2px solid #e0e0e0;
+        border-radius: 16px;
+        background-color: rgba(255, 255, 255, 0.85);
+        border: 2px solid #ffc2d6;
         text-align: center;
+        box-shadow: 0 4px 12px rgba(255, 92, 138, 0.10);
         transition: 0.3s;
+        margin-bottom: 8px;
     }
     .profile-active {
-        border: 3px solid #ff4b4b;
-        background-color: rgba(255, 75, 75, 0.08);
+        border: 3px solid #ff477e;
+        background-color: #fff0f6;
+        box-shadow: 0 6px 18px rgba(255, 71, 126, 0.22);
     }
+    /* 毒舌教練框（深莓果紅粉底＋亮粉紅邊框） */
     .coach-box-roast {
         padding: 16px 20px;
-        border-radius: 12px;
-        background-color: #2b1111;
-        border-left: 6px solid #ff4b4b;
-        color: #ffcccc;
+        border-radius: 14px;
+        background-color: #590d22;
+        border-left: 6px solid #ff4d6d;
+        color: #ffe5ec !important;
         font-size: 1.05rem;
         margin-bottom: 18px;
+        box-shadow: 0 4px 14px rgba(89, 13, 34, 0.18);
     }
+    .coach-box-roast p, .coach-box-roast li, .coach-box-roast strong, .coach-box-roast em {
+        color: #ffe5ec !important;
+    }
+    /* 鼓勵教練框（柔粉白底＋甜美桃粉框） */
     .coach-box-praise {
         padding: 16px 20px;
-        border-radius: 12px;
-        background-color: #102a1c;
-        border-left: 6px solid #00cc66;
-        color: #ccffdd;
+        border-radius: 14px;
+        background-color: #fff0f6;
+        border: 1.5px solid #ff8fab;
+        border-left: 6px solid #ff477e;
+        color: #590d22 !important;
         font-size: 1.05rem;
         margin-bottom: 18px;
+        box-shadow: 0 4px 14px rgba(255, 143, 171, 0.2);
     }
 </style>
 """, unsafe_allow_html=True)
 
-DATA_FILE = "fat_loss_data_v2.json"
+DATA_FILE = "fat_loss_data_v3.json"
 
 ACTIVITY_LEVELS = {
     "久坐少動 (辦公室/幾乎不運動 ×1.2)": 1.2,
@@ -83,7 +145,6 @@ def calc_bmr_and_allowable(user_info):
     gender = user_info.get("gender", "女")
     act_factor = float(user_info.get("activity_factor", 1.375))
 
-    # Mifflin-St Jeor 基礎代謝公式
     if gender == "男":
         bmr = 10 * weight + 6.25 * height - 5 * age + 5
     else:
@@ -94,7 +155,7 @@ def calc_bmr_and_allowable(user_info):
     return round(bmr), round(activity_burn), round(total_allowable)
 
 # ==========================================
-# 3. 資料讀寫與初始化
+# 3. 資料讀寫與初始化（已更新雙方最新目標）
 # ==========================================
 def get_default_data():
     today = date.today()
@@ -102,13 +163,13 @@ def get_default_data():
     return {
         "users": {
             "Anna": {
-                "avatar": "👩",
+                "avatar": "👩🏻",
                 "gender": "女",
                 "age": 26,
                 "height": 151.0,
                 "start_weight": 42.1,
                 "current_weight": 42.1,
-                "target_weight": 41.0,
+                "target_weight": 40.5,
                 "start_bf": 22.6,
                 "current_bf": 22.6,
                 "target_bf": 20.0,
@@ -116,16 +177,16 @@ def get_default_data():
                 "sleep_deadline": "02:00"
             },
             "Fergal": {
-                "avatar": "👨",
+                "avatar": "👨🏻",
                 "gender": "男",
                 "age": 26,
                 "height": 171.0,
                 "start_weight": 68.1,
                 "current_weight": 68.1,
-                "target_weight": 64.0,
+                "target_weight": 65.5,
                 "start_bf": 21.6,
                 "current_bf": 21.6,
-                "target_bf": 17.0,
+                "target_bf": 18.0,
                 "activity_factor": 1.375,
                 "sleep_deadline": "02:00"
             }
@@ -230,7 +291,6 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
             f"📢 **【系統警報】{user_name} 今天完全還沒打卡！** 怎麼，是已經放棄 $1000 獎金，打算把錢雙手奉上給另一半了嗎？快點填寫今天的飲食與運動數據，別想裝死躲過結算！"
         )
 
-    # 飲水檢查
     if today_rec.get("water_cc", 0) < 1800:
         short = 1800 - today_rec.get("water_cc", 0)
         if hard_mode:
@@ -240,7 +300,6 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
     else:
         praises.append(f"飲水 {today_rec.get('water_cc', 0)}cc 達標，細胞水噹噹，代謝全開！")
 
-    # 睡眠檢查
     if not today_rec.get("slept_on_time", True):
         if hard_mode:
             roasts.append(f"超過 {user_info['sleep_deadline']} 還不睡覺，是在熬夜幫脂肪開派對嗎？皮質醇飆高、瘦素下降，明天起床直接水腫給你看！")
@@ -249,7 +308,6 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
     else:
         praises.append(f"準時在 {user_info['sleep_deadline']} 前就寢，睡眠燃脂力滿分！")
 
-    # 淨熱量檢查：(總食入 - 運動消耗) vs (BMR + 活動量)
     intake, burn, net_cal = get_record_calories(today_rec)
     if intake == 0:
         roasts.append("今天四餐熱量都填 0？別想靠不填寫來逃避熱量計算，快把早午晚餐和零食老實招來！")
@@ -257,7 +315,7 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
         over = net_cal - allowable_cal
         if hard_mode:
             roasts.append(
-                f"熱量未達標！總食入 {intake} kcal 扣掉運動 {burn} kcal 后，淨攝取高達 **{net_cal} kcal**，硬生生超出你每日可攝取上限（{allowable_cal} kcal）足足 **{over} kcal**！你嘴裡嚼的每一口零食，都會變成週末的 $100 罰款！"
+                f"熱量未達標！總食入 {intake} kcal 扣掉運動 {burn} kcal 後，淨攝取高達 **{net_cal} kcal**，硬生生超出你每日可攝取上限（{allowable_cal} kcal）足足 **{over} kcal**！你嘴裡嚼的每一口零食，都會變成週末的 $100 罰款！"
             )
         else:
             roasts.append(
@@ -269,7 +327,6 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
             f"熱量完美達標！總食入 {intake} - 運動 {burn} = **淨攝取 {net_cal} kcal**（低於上限 {allowable_cal} kcal，還製造了 {remain} kcal 熱量赤字）！"
         )
 
-    # 運動檢查
     if today_rec.get("exercise", "無") == "無":
         if hard_mode:
             roasts.append("今天運動掛零？沙發是有塗強力膠把你黏住嗎？對手都在偷偷流汗消耗熱量搶 $1000 了，你還在躺平！")
@@ -278,7 +335,6 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
     else:
         praises.append(f"完成「{today_rec.get('exercise')}」（消耗 {burn} kcal），汗水就是脂肪哭泣的眼淚！")
 
-    # 排便檢查
     if "未排便" in today_rec.get("poop", ""):
         roasts.append("今天還沒排便，滿肚子宿便體重計當然不會對你客氣，多喝水＋補充膳食纖維！")
 
@@ -289,7 +345,7 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
             body += f"\n\n✨ *勉強值得誇獎的地方：{praises[0]}*"
         return "roast", header + body
     else:
-        header = f"🏆 **【今日自律王者：{user_name}】**\n\n"
+        header = f"👑 **【今日自律王者：{user_name}】**\n\n"
         body = "太狠了！今天所有指標全部完美達標！\n" + "\n".join([f"- ✅ {p}" for p in praises])
         body += "\n\n照這個節奏下去，$1000 獎金根本是你的囊中物！"
         return "praise", header + body
@@ -301,7 +357,7 @@ def get_week_dates(ref_date):
 # ==========================================
 # 5. 頂部標題與 $1000 終極大獎戰況看板
 # ==========================================
-st.title("🔥 Anna & Fergal 情侶減脂生死鬥")
+st.title("🎀 Anna & Fergal 情侶減脂生死鬥")
 st.caption("先達成個人「體重＋體脂」雙目標者，獨得 **$1,000 元獎金** ｜ 每週結算未達標一項 **罰款 $100**")
 
 anna_prog, _, _, anna_win = calc_goal_progress(data["users"]["Anna"])
@@ -316,10 +372,10 @@ with st.container(border=True):
     st.subheader("🏆 $1,000 元大獎爭奪進度條")
     col_b1, col_b2 = st.columns(2)
     with col_b1:
-        st.write(f"👩 **Anna 總達成率：{anna_prog*100:.1f}%**")
+        st.write(f"👩🏻 **Anna 總達成率：{anna_prog*100:.1f}%**（目標 40.5kg / 20%）")
         st.progress(anna_prog)
     with col_b2:
-        st.write(f"👨 **Fergal 總達成率：{fergal_prog*100:.1f}%**")
+        st.write(f"👨🏻 **Fergal 總達成率：{fergal_prog*100:.1f}%**（目標 65.5kg / 18%）")
         st.progress(fergal_prog)
 
 # ==========================================
@@ -332,6 +388,7 @@ for col, uname in zip([col_u1, col_u2], ["Anna", "Fergal"]):
     u = data["users"][uname]
     is_active = st.session_state.selected_user == uname
     diff_w = u["current_weight"] - u["target_weight"]
+    diff_bf = u["current_bf"] - u["target_bf"]
     bmi_val, bmi_status = calc_bmi(u["current_weight"], u.get("height", 160.0))
     bmr_v, act_v, allow_v = calc_bmr_and_allowable(u)
 
@@ -339,18 +396,18 @@ for col, uname in zip([col_u1, col_u2], ["Anna", "Fergal"]):
         active_class = "profile-active" if is_active else ""
         st.markdown(f"""
         <div class="profile-card {active_class}">
-            <h3>{u['avatar']} {uname} {'🔥 (檢視中)' if is_active else ''}</h3>
-            <p style="font-size:1.25rem; font-weight:bold; margin:4px 0;">
-                體重：{u['current_weight']:.1f} kg ｜ 體脂：{u['current_bf']:.1f}%
+            <h3 style="margin-bottom:6px;">{u['avatar']} {uname} {'💖 (檢視中)' if is_active else ''}</h3>
+            <p style="font-size:1.25rem; font-weight:bold; margin:4px 0; color:#c9184a !important;">
+                目前：{u['current_weight']:.1f} kg ｜ 體脂：{u['current_bf']:.1f}%
             </p>
             <p style="font-size:0.98rem; margin:4px 0;">
                 身高：{u.get('height', 160):.0f} cm ｜ <b>BMI：{bmi_val:.1f}（{bmi_status}）</b>
             </p>
-            <p style="font-size:0.95rem; color:#ff6b6b; margin:4px 0;">
+            <p style="font-size:0.95rem; color:#d6336c !important; margin:4px 0;">
                 每日可攝取熱量：<b>{allow_v} kcal</b>（基礎 {bmr_v} + 活動 {act_v}）
             </p>
-            <p style="color:gray; font-size:0.9rem; margin:0;">
-                目標：{u['target_weight']:.1f} kg / {u['target_bf']:.1f}%（體重還差 {max(diff_w, 0):.1f} kg）
+            <p style="color:#80233f !important; font-size:0.92rem; margin:4px 0 0 0;">
+                🎯 目標：<b>{u['target_weight']:.1f} kg / {u['target_bf']:.1f}%</b>（還差 {max(diff_w, 0):.1f} kg、{max(diff_bf, 0):.1f}%）
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -398,11 +455,10 @@ with tab1:
     sel_date_str = sel_date.isoformat()
     existing = u_records.get(sel_date_str, {})
 
-    # 可隨時更改的睡眠門禁時間設定
     with st.expander("⏰ 修改每日睡眠門禁時間（目前設定：" + u_info["sleep_deadline"] + " 前睡覺）"):
         h, m = map(int, u_info["sleep_deadline"].split(":"))
         new_sleep_time = st.time_input("設定新的睡覺門禁時間", value=time(h, m), key=f"sleep_t_{curr_user}")
-        if st.button("更新睡眠門禁時間", key=f"save_sleep_{curr_user}"):
+        if st.button("更新睡眠門禁時間", key=f"save_sleep_{curr_user}", type="primary"):
             u_info["sleep_deadline"] = new_sleep_time.strftime("%H:%M")
             save_data(data)
             st.success(f"已將 {curr_user} 的睡眠門禁更新為 **{u_info['sleep_deadline']}**！")
@@ -471,7 +527,7 @@ with tab1:
                 value=float(existing.get("body_fat", u_info["current_bf"]))
             )
 
-        submitted = st.form_submit_button("💾 儲存今日紀錄並計算熱量達標結果", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("💖 儲存今日紀錄並計算熱量達標結果", use_container_width=True, type="primary")
         if submitted:
             u_records[sel_date_str] = {
                 "exercise": exercise,
@@ -526,7 +582,7 @@ with tab2:
             go.Scatter(
                 x=df_chart["日期"], y=df_chart["體重 (kg)"],
                 name="體重 (kg)", mode="lines+markers",
-                line=dict(color="#ff4b4b", width=3), marker=dict(size=8)
+                line=dict(color="#e63973", width=3.5), marker=dict(size=9, color="#c9184a")
             ),
             secondary_y=False
         )
@@ -534,16 +590,18 @@ with tab2:
             go.Scatter(
                 x=df_chart["日期"], y=df_chart["體脂率 (%)"],
                 name="體脂率 (%)", mode="lines+markers",
-                line=dict(color="#00b4d8", width=3, dash="dot"), marker=dict(size=8)
+                line=dict(color="#ff85a1", width=3, dash="dot"), marker=dict(size=8, color="#ff477e")
             ),
             secondary_y=True
         )
         fig.add_hline(
-            y=u_info["target_weight"], line_dash="dash", line_color="#ff4b4b",
+            y=u_info["target_weight"], line_dash="dash", line_color="#c9184a",
             annotation_text=f"目標體重 {u_info['target_weight']}kg", secondary_y=False
         )
         fig.update_layout(
             height=380,
+            paper_bgcolor="rgba(255,255,255,0.6)",
+            plot_bgcolor="rgba(255,240,245,0.6)",
             hovermode="x unified",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
@@ -574,7 +632,6 @@ with tab2:
 
     st.divider()
 
-    # 個人目標與基礎代謝/活動量設定
     with st.expander(f"🎯 修改 {curr_user} 的身高、目標體重/體脂與活動量等級"):
         with st.form(f"goal_form_{curr_user}"):
             g1, g2, g3 = st.columns(3)
@@ -590,7 +647,7 @@ with tab2:
                 curr_act_idx = act_vals.index(u_info.get("activity_factor", 1.375)) if u_info.get("activity_factor") in act_vals else 1
                 sel_act_label = st.selectbox("日常活動量等級（計算每日可攝取熱量用）", act_labels, index=curr_act_idx)
 
-            if st.form_submit_button("更新個人資料與代謝設定"):
+            if st.form_submit_button("更新個人資料與代謝設定", type="primary"):
                 u_info["height"] = new_h
                 u_info["age"] = new_age
                 u_info["target_weight"] = new_tw
@@ -683,8 +740,9 @@ with tab3:
 # 9. 側邊欄：重置範例資料按鈕
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ 系統管理")
+    st.header("🎀 系統管理")
     st.write(f"目前檢視：**{curr_user}**")
+    st.write(f"目標：**{u_info['target_weight']} kg / {u_info['target_bf']}%**")
     st.write(f"基礎代謝 (BMR)：`{bmr_curr}` kcal")
     st.write(f"活動消耗量：`{act_curr}` kcal")
     st.write(f"每日可攝取上限：`{allowable_curr}` kcal")
