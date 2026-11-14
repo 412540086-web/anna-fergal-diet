@@ -30,7 +30,7 @@ st.markdown("""
         background-color: #ffeaf2;
         border-right: 1px solid #ffc2d6;
     }
-    /* 標題與一般文字深莓果色，確保手機深色模式也清晰好讀 */
+    /* 標題與一般文字深莓果色 */
     h1, h2, h3, h4, p, label, .stMarkdown {
         color: #4a1525 !important;
     }
@@ -82,7 +82,7 @@ st.markdown("""
         background-color: #fff0f6;
         box-shadow: 0 6px 18px rgba(255, 71, 126, 0.22);
     }
-    /* 毒舌教練框（深莓果紅粉底＋亮粉紅邊框） */
+    /* 毒舌教練框 */
     .coach-box-roast {
         padding: 16px 20px;
         border-radius: 14px;
@@ -96,7 +96,7 @@ st.markdown("""
     .coach-box-roast p, .coach-box-roast li, .coach-box-roast strong, .coach-box-roast em {
         color: #ffe5ec !important;
     }
-    /* 鼓勵教練框（柔粉白底＋甜美桃粉框） */
+    /* 鼓勵教練框 */
     .coach-box-praise {
         padding: 16px 20px;
         border-radius: 14px;
@@ -121,8 +121,26 @@ ACTIVITY_LEVELS = {
 }
 
 # ==========================================
-# 2. 核心健康計算公式：BMI、BMR 與活動消耗量
+# 2. 核心計算公式：跨午夜睡眠、BMI、BMR 與活動消耗量
 # ==========================================
+def time_to_sleep_minutes(t_str):
+    """以晚上 18:00 為起點換算分鐘數，確保 23:30 晚間與 01:30 凌晨能正確比較先後"""
+    h, m = map(int, t_str.split(":"))
+    if h < 18:
+        h += 24
+    return h * 60 + m
+
+def check_sleep_status(actual_str, target_str):
+    act_m = time_to_sleep_minutes(actual_str)
+    tgt_m = time_to_sleep_minutes(target_str)
+    diff = act_m - tgt_m  # <= 0 代表準時或提早，> 0 代表晚睡分鐘數
+    return (diff <= 0), diff
+
+def shift_time_str(t_str, delta_minutes):
+    h, m = map(int, t_str.split(":"))
+    dt = datetime(2026, 1, 1, h, m) + timedelta(minutes=delta_minutes)
+    return dt.strftime("%H:%M")
+
 def calc_bmi(weight_kg, height_cm):
     h_m = height_cm / 100.0
     if h_m <= 0:
@@ -155,7 +173,7 @@ def calc_bmr_and_allowable(user_info):
     return round(bmr), round(activity_burn), round(total_allowable)
 
 # ==========================================
-# 3. 資料讀寫與初始化（已更新雙方最新目標）
+# 3. 資料讀寫與初始化
 # ==========================================
 def get_default_data():
     today = date.today()
@@ -197,6 +215,8 @@ def get_default_data():
                     "exercise": "有氧運動",
                     "exercise_burn": 220,
                     "water_cc": 1900,
+                    "sleep_target": "02:00",
+                    "actual_sleep_time": "01:35",
                     "slept_on_time": True,
                     "breakfast_note": "無糖豆漿 + 水煮蛋",
                     "breakfast_cal": 260,
@@ -216,6 +236,8 @@ def get_default_data():
                     "exercise": "體態雕塑",
                     "exercise_burn": 320,
                     "water_cc": 2000,
+                    "sleep_target": "02:00",
+                    "actual_sleep_time": "01:50",
                     "slept_on_time": True,
                     "breakfast_note": "美式咖啡 + 鮪魚蛋吐司",
                     "breakfast_cal": 420,
@@ -291,6 +313,7 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
             f"📢 **【系統警報】{user_name} 今天完全還沒打卡！** 怎麼，是已經放棄 $1000 獎金，打算把錢雙手奉上給另一半了嗎？快點填寫今天的飲食與運動數據，別想裝死躲過結算！"
         )
 
+    # 飲水檢查
     if today_rec.get("water_cc", 0) < 1800:
         short = 1800 - today_rec.get("water_cc", 0)
         if hard_mode:
@@ -300,14 +323,26 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
     else:
         praises.append(f"飲水 {today_rec.get('water_cc', 0)}cc 達標，細胞水噹噹，代謝全開！")
 
-    if not today_rec.get("slept_on_time", True):
-        if hard_mode:
-            roasts.append(f"超過 {user_info['sleep_deadline']} 還不睡覺，是在熬夜幫脂肪開派對嗎？皮質醇飆高、瘦素下降，明天起床直接水腫給你看！")
-        else:
-            roasts.append(f"昨晚超過 {user_info['sleep_deadline']} 才睡，熬夜會影響減脂荷爾蒙，今晚記得早點休息！")
+    # 動態入睡目標檢查
+    day_sleep_target = today_rec.get("sleep_target", user_info.get("sleep_deadline", "02:00"))
+    actual_sleep = today_rec.get("actual_sleep_time", "")
+    if actual_sleep:
+        on_time, diff_mins = check_sleep_status(actual_sleep, day_sleep_target)
     else:
-        praises.append(f"準時在 {user_info['sleep_deadline']} 前就寢，睡眠燃脂力滿分！")
+        on_time = today_rec.get("slept_on_time", True)
+        diff_mins = 0
 
+    if not on_time:
+        late_txt = f"（實際 **{actual_sleep}** 才睡，超過目標 {day_sleep_target} 足足 **{diff_mins} 分鐘**）" if actual_sleep else f"（超過目標 {day_sleep_target}）"
+        if hard_mode:
+            roasts.append(f"熬夜違規{late_txt}！你自己訂的入睡目標都做不到，是在幫脂肪開派對嗎？皮質醇飆高、瘦素下降，明天起床直接水腫兼噴 $100 罰款！")
+        else:
+            roasts.append(f"昨晚沒有在目標時間前入睡{late_txt}，熬夜會影響減脂荷爾蒙，今晚記得準時上床休息！")
+    else:
+        early_txt = f"（實際 {actual_sleep} 入睡，達成目標 {day_sleep_target}）" if actual_sleep else f"（準時在 {day_sleep_target} 前就寢）"
+        praises.append(f"作息自律{early_txt}，睡眠燃脂力滿分！")
+
+    # 熱量檢查
     intake, burn, net_cal = get_record_calories(today_rec)
     if intake == 0:
         roasts.append("今天四餐熱量都填 0？別想靠不填寫來逃避熱量計算，快把早午晚餐和零食老實招來！")
@@ -327,6 +362,7 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
             f"熱量完美達標！總食入 {intake} - 運動 {burn} = **淨攝取 {net_cal} kcal**（低於上限 {allowable_cal} kcal，還製造了 {remain} kcal 熱量赤字）！"
         )
 
+    # 運動檢查
     if today_rec.get("exercise", "無") == "無":
         if hard_mode:
             roasts.append("今天運動掛零？沙發是有塗強力膠把你黏住嗎？對手都在偷偷流汗消耗熱量搶 $1000 了，你還在躺平！")
@@ -335,6 +371,7 @@ def generate_coach_message(user_name, user_info, today_rec, hard_mode=True):
     else:
         praises.append(f"完成「{today_rec.get('exercise')}」（消耗 {burn} kcal），汗水就是脂肪哭泣的眼淚！")
 
+    # 排便檢查
     if "未排便" in today_rec.get("poop", ""):
         roasts.append("今天還沒排便，滿肚子宿便體重計當然不會對你客氣，多喝水＋補充膳食纖維！")
 
@@ -400,8 +437,8 @@ for col, uname in zip([col_u1, col_u2], ["Anna", "Fergal"]):
             <p style="font-size:1.25rem; font-weight:bold; margin:4px 0; color:#c9184a !important;">
                 目前：{u['current_weight']:.1f} kg ｜ 體脂：{u['current_bf']:.1f}%
             </p>
-            <p style="font-size:0.98rem; margin:4px 0;">
-                身高：{u.get('height', 160):.0f} cm ｜ <b>BMI：{bmi_val:.1f}（{bmi_status}）</b>
+            <p style="font-size:0.96rem; margin:4px 0;">
+                身高：{u.get('height', 160):.0f} cm ｜ <b>BMI：{bmi_val:.1f}（{bmi_status}）</b> ｜ 🌙 入睡目標：<b>{u['sleep_deadline']} 前</b>
             </p>
             <p style="font-size:0.95rem; color:#d6336c !important; margin:4px 0;">
                 每日可攝取熱量：<b>{allow_v} kcal</b>（基礎 {bmr_v} + 活動 {act_v}）
@@ -451,21 +488,47 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1: 每日任務與早午晚零食紀錄
 # ------------------------------------------
 with tab1:
-    sel_date = st.date_input("選擇紀錄日期", value=date.today(), key=f"date_{curr_user}")
+    # 顯眼的「隨時間更改入睡目標」控制卡片
+    with st.container(border=True):
+        st.markdown(f"#### 🌙 {curr_user} 的入睡時間目標設定（目前目標：**每日 `{u_info['sleep_deadline']}` 前入睡**）")
+        st.caption("作息想慢慢往前調整嗎？可隨時更新你的入睡目標時間（更新後僅套用於之後的紀錄，不會影響過去已達標的歷史紀錄）。")
+        st_c1, st_c2, st_c3 = st.columns([2, 1.2, 1.5])
+        with st_c1:
+            h_curr, m_curr = map(int, u_info["sleep_deadline"].split(":"))
+            new_sleep_time = st.time_input(
+                "選擇新的入睡目標時間",
+                value=time(h_curr, m_curr),
+                step=timedelta(minutes=15),
+                key=f"sleep_t_{curr_user}"
+            )
+        with st_c2:
+            st.write("")
+            st.write("")
+            if st.button("💾 套用新入睡目標", key=f"save_sleep_{curr_user}", type="primary", use_container_width=True):
+                u_info["sleep_deadline"] = new_sleep_time.strftime("%H:%M")
+                save_data(data)
+                st.success(f"已更新！{curr_user} 新的入睡目標為 **{u_info['sleep_deadline']}** 前！")
+                st.rerun()
+        with st_c3:
+            st.write("")
+            st.write("")
+            earlier_str = shift_time_str(u_info["sleep_deadline"], -30)
+            if st.button(f"⏪ 挑戰提早30分 ({earlier_str})", key=f"early_sleep_{curr_user}", use_container_width=True):
+                u_info["sleep_deadline"] = earlier_str
+                save_data(data)
+                st.success(f"太自律了！{curr_user} 的入睡目標已提早為 **{earlier_str}**！")
+                st.rerun()
+
+    sel_date = st.date_input("📅 選擇要填寫的紀錄日期", value=date.today(), key=f"date_{curr_user}")
     sel_date_str = sel_date.isoformat()
     existing = u_records.get(sel_date_str, {})
 
-    with st.expander("⏰ 修改每日睡眠門禁時間（目前設定：" + u_info["sleep_deadline"] + " 前睡覺）"):
-        h, m = map(int, u_info["sleep_deadline"].split(":"))
-        new_sleep_time = st.time_input("設定新的睡覺門禁時間", value=time(h, m), key=f"sleep_t_{curr_user}")
-        if st.button("更新睡眠門禁時間", key=f"save_sleep_{curr_user}", type="primary"):
-            u_info["sleep_deadline"] = new_sleep_time.strftime("%H:%M")
-            save_data(data)
-            st.success(f"已將 {curr_user} 的睡眠門禁更新為 **{u_info['sleep_deadline']}**！")
-            st.rerun()
+    # 若該日已有紀錄則顯示該日鎖定的目標，否則帶入目前最新目標
+    day_target_str = existing.get("sleep_target", u_info["sleep_deadline"])
+    actual_sleep_str = existing.get("actual_sleep_time", day_target_str)
 
     with st.form(f"daily_log_form_{curr_user}"):
-        st.subheader(f"📅 {sel_date_str} 任務與熱量打卡")
+        st.subheader(f"📝 {sel_date_str} 任務與熱量打卡")
         st.info(f"💡 **{curr_user} 今日熱量標準**：基礎代謝 `{bmr_curr}` + 活動量 `{act_curr}` = **每日可攝取 `{allowable_curr}` kcal**（規則：`總食入熱量 － 運動消耗熱量 ≤ {allowable_curr} kcal` 才算達標！）")
 
         c1, c2 = st.columns(2)
@@ -480,16 +543,25 @@ with tab1:
                 value=int(existing.get("exercise_burn", 0))
             )
 
-        with c2:
             water_cc = st.number_input(
                 "💧 今日飲水量 (cc) — 目標 1800cc",
                 min_value=0, max_value=6000, step=100,
                 value=int(existing.get("water_cc", 1800))
             )
 
-            slept_on_time = st.checkbox(
-                f"😴 昨晚有在 {u_info['sleep_deadline']} 前睡覺",
-                value=bool(existing.get("slept_on_time", True))
+        with c2:
+            th, tm = map(int, day_target_str.split(":"))
+            form_day_target = st.time_input(
+                "🎯 當日入睡目標時間（可依當日作息微調）",
+                value=time(th, tm),
+                step=timedelta(minutes=15)
+            )
+
+            ah, am = map(int, actual_sleep_str.split(":"))
+            form_actual_sleep = st.time_input(
+                "😴 實際入睡時間（支援晚上 23:00 ～ 凌晨 04:00）",
+                value=time(ah, am),
+                step=timedelta(minutes=5)
             )
 
             poop_options = ["順暢 (1次)", "順暢 (2次以上)", "微卡/少許", "❌ 今日未排便"]
@@ -527,13 +599,19 @@ with tab1:
                 value=float(existing.get("body_fat", u_info["current_bf"]))
             )
 
-        submitted = st.form_submit_button("💖 儲存今日紀錄並計算熱量達標結果", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("💖 儲存今日紀錄並計算達標結果", use_container_width=True, type="primary")
         if submitted:
+            tgt_s = form_day_target.strftime("%H:%M")
+            act_s = form_actual_sleep.strftime("%H:%M")
+            is_on_time, _ = check_sleep_status(act_s, tgt_s)
+
             u_records[sel_date_str] = {
                 "exercise": exercise,
                 "exercise_burn": exercise_burn,
                 "water_cc": water_cc,
-                "slept_on_time": slept_on_time,
+                "sleep_target": tgt_s,
+                "actual_sleep_time": act_s,
+                "slept_on_time": is_on_time,
                 "breakfast_note": b_note,
                 "breakfast_cal": b_cal,
                 "lunch_note": l_note,
@@ -565,6 +643,8 @@ with tab2:
         for d in sorted_dates:
             r = u_records[d]
             intake, burn, net = get_record_calories(r)
+            s_tgt = r.get("sleep_target", u_info["sleep_deadline"])
+            s_act = r.get("actual_sleep_time", "-")
             rows.append({
                 "日期": d,
                 "體重 (kg)": r["weight"],
@@ -572,6 +652,7 @@ with tab2:
                 "總食入 (kcal)": intake,
                 "運動消耗 (kcal)": burn,
                 "淨攝取 (kcal)": net,
+                "入睡紀錄": f"{s_act} (目標 {s_tgt})",
                 "運動": r["exercise"],
                 "排便": r["poop"]
             })
@@ -682,8 +763,17 @@ with tab3:
                 sculpt_count += 1
             if rec.get("water_cc", 0) < 1800:
                 water_fail_days.append(f"{d_str} (僅喝 {rec.get('water_cc', 0)}cc)")
-            if not rec.get("slept_on_time", True):
-                sleep_fail_days.append(d_str)
+
+            day_tgt = rec.get("sleep_target", u_info["sleep_deadline"])
+            act_slp = rec.get("actual_sleep_time", "")
+            if act_slp:
+                slp_ok, _ = check_sleep_status(act_slp, day_tgt)
+            else:
+                slp_ok = rec.get("slept_on_time", True)
+
+            if not slp_ok:
+                detail = f"{d_str} (目標 {day_tgt} 前，實際 {act_slp} 睡)" if act_slp else f"{d_str} (未在 {day_tgt} 前睡)"
+                sleep_fail_days.append(detail)
 
             intake, burn, net_cal = get_record_calories(rec)
             if intake > 0 and net_cal > allowable_curr:
@@ -723,7 +813,7 @@ with tab3:
     for wd in water_fail_days:
         penalties.append((f"飲水未滿 1800cc：{wd}", 100))
     for sd in sleep_fail_days:
-        penalties.append((f"未在 {u_info['sleep_deadline']} 前睡覺：{sd}", 100))
+        penalties.append((f"未達入睡目標時間：{sd}", 100))
     for cd in cal_fail_days:
         penalties.append((f"淨熱量超標未達標：{cd}", 100))
 
@@ -743,6 +833,7 @@ with st.sidebar:
     st.header("🎀 系統管理")
     st.write(f"目前檢視：**{curr_user}**")
     st.write(f"目標：**{u_info['target_weight']} kg / {u_info['target_bf']}%**")
+    st.write(f"目前入睡目標：**{u_info['sleep_deadline']} 前**")
     st.write(f"基礎代謝 (BMR)：`{bmr_curr}` kcal")
     st.write(f"活動消耗量：`{act_curr}` kcal")
     st.write(f"每日可攝取上限：`{allowable_curr}` kcal")
